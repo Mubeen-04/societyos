@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { errorHandler } from './middleware/errorHandler.js';
 
 // Route imports
@@ -25,6 +26,7 @@ import dailyHelpRoutes from './routes/dailyHelpRoutes.js';
 import { stripeWebhook } from './controllers/stripePaymentController.js';
 
 const app = express();
+const clientDistPath = fileURLToPath(new URL('../client/dist/', import.meta.url));
 
 // Security headers
 app.use(
@@ -98,7 +100,27 @@ app.use('/api/committee', committeeRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/daily-help', dailyHelpRoutes);
 
-// 404 handler for undefined routes
+// Keep unknown API requests as JSON and ahead of static and SPA handling.
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Cannot ${req.method} ${req.originalUrl} - Endpoint not found.`,
+    code: 'ROUTE_NOT_FOUND'
+  });
+});
+
+// Serve the Vite production bundle from server/client/dist.
+app.use(express.static(clientDistPath));
+
+// React Router owns non-API frontend routes. Keep uploads as ordinary 404s.
+app.get('*', (req, res, next) => {
+  if (req.path === '/uploads' || req.path.startsWith('/uploads/')) return next();
+  res.sendFile(path.join(clientDistPath, 'index.html'), (error) => {
+    if (error) next(error);
+  });
+});
+
+// 404 handler for undefined non-API routes
 app.use((req, res) => {
   res.status(404).json({
     success: false,
