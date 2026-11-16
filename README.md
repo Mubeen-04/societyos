@@ -186,3 +186,4 @@ npm test
 - Integration of real Razorpay / Stripe payment webhooks with PDF invoice downloads.
 - Automatic Number Plate Recognition (ANPR) camera integration for automated barrier entry.
 - Push notifications via WebPush / Firebase Cloud Messaging (FCM).
+# societyos
