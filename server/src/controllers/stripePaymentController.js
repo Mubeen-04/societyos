@@ -320,7 +320,16 @@ export const getResidentReceipt = async (req, res, next) => {
 export const getFinancePayments = async (req, res, next) => {
   try {
     const query = { societyId: req.societyId };
-    if (MAINTENANCE_PAYER_ROLES.includes(req.user.role)) Object.assign(query, personalPaymentScope(req.user));
+    const isPersonalPayer = MAINTENANCE_PAYER_ROLES.includes(req.user.role);
+    if (isPersonalPayer) {
+      Object.assign(query, personalPaymentScope(req.user));
+      const pendingStripePayments = await Payment.find({
+        ...query,
+        provider: 'STRIPE',
+        status: 'PENDING'
+      }).sort({ createdAt: -1 }).limit(10);
+      await Promise.all(pendingStripePayments.map((payment) => syncStripeSessionPayment(payment, req)));
+    }
     const payments = await Payment.find(query).populate('userId', 'name email').populate('invoiceId', 'invoiceNumber billingMonth').populate('expenseId', 'title category').populate('apartmentId', 'unitNumber').sort({ createdAt: -1 }).limit(Math.min(100, Number(req.query.limit) || 30));
     res.json({ success: true, data: payments });
   } catch (error) { next(error); }

@@ -17,12 +17,12 @@ export const MaintenanceBills = () => {
 
   const fetchInvoices = async () => {
     try {
+      const paymentResponse = await api.get('/billing/payments');
+      setPayments(paymentResponse.data || []);
       const res = await api.get('/billing/invoices');
       if (res.success) {
         setInvoices(res.data);
       }
-      const paymentResponse = await api.get('/billing/payments');
-      setPayments(paymentResponse.data || []);
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
     } finally {
