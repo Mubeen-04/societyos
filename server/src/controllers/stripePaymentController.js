@@ -85,10 +85,23 @@ export const createCheckoutForInvoice = async (req, res, next) => {
     if (balance <= 0 || invoice.status === INVOICE_STATUS.CANCELLED) return res.status(409).json({ success: false, message: 'This bill has no outstanding balance.' });
 
     const existing = await Payment.findOne({ societyId: req.societyId, invoiceId: invoice._id, userId: req.user._id, provider: 'STRIPE', status: 'PENDING' }).sort({ createdAt: -1 });
-    if (existing?.checkoutUrl && existing.sessionExpiresAt > new Date()) {
-      return res.json({ success: true, data: { checkoutUrl: existing.checkoutUrl, sessionId: existing.providerSessionId, paymentId: existing._id } });
+    if (existing) {
+      const currentPayment = await syncStripeSessionPayment(existing, req);
+      if (currentPayment.status === 'SUCCESS') {
+        return res.status(409).json({ success: false, message: 'This maintenance bill has already been paid.' });
+      }
+      if (currentPayment.status === 'PENDING' && currentPayment.checkoutUrl && currentPayment.sessionExpiresAt > new Date()) {
+        return res.json({ success: true, data: { checkoutUrl: currentPayment.checkoutUrl, sessionId: currentPayment.providerSessionId, paymentId: currentPayment._id } });
+      }
+      if (currentPayment.status === 'PENDING') {
+        currentPayment.status = 'CANCELLED';
+        await currentPayment.save();
+      }
+      await MaintenanceInvoice.updateOne(
+        { _id: invoice._id, societyId: req.societyId, checkoutPaymentId: currentPayment._id },
+        { $set: { checkoutPaymentId: null, checkoutLockToken: '', checkoutLockAt: null } }
+      );
     }
-    if (existing) { existing.status = 'CANCELLED'; await existing.save(); }
 
     lockToken = crypto.randomUUID();
     const now = new Date();
@@ -254,6 +267,23 @@ export const syncStripeSessionPayment = async (payment, req = null) => {
         const actor = await User.findById(payment.userId);
         await ensureLedgerCredit({ payment, invoice, actor, req });
       }
+      return await Payment.findById(payment._id);
+    }
+    if (res.ok && session.status === 'expired') {
+      payment.status = 'CANCELLED';
+      await payment.save();
+      await logAudit({
+        req,
+        action: 'PAYMENT_CANCELLED',
+        entity: 'Payment',
+        entityId: payment._id,
+        newState: { status: payment.status, reason: 'STRIPE_SESSION_EXPIRED' },
+        idempotencyKey: `STRIPE_SESSION_EXPIRED:${payment._id}:AUDIT`
+      });
+      await MaintenanceInvoice.updateOne(
+        { _id: payment.invoiceId, societyId: payment.societyId, checkoutPaymentId: payment._id },
+        { $set: { checkoutPaymentId: null, checkoutLockToken: '', checkoutLockAt: null } }
+      );
       return await Payment.findById(payment._id);
     }
   } catch (err) {
