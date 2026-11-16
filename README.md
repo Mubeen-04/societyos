@@ -10,6 +10,9 @@
 
 ---
 
+<img width="1917" height="866" alt="image" src="https://github.com/user-attachments/assets/419aa39f-2f3e-4ab4-8ae8-90e5120e2a8e" />
+
+
 ## 🌟 Key Highlights & Real-World SaaS Engineering
 
 SocietyOS goes beyond basic CRUD operations to demonstrate real-world full-stack architecture:
